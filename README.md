@@ -4,10 +4,13 @@ AviUtl ExEdit2 用のWAVファイル出力プラグインです．
 ## インストール
 [Releases](https://github/cycloawaodorin/wav_output_ks/releases) から `wav_output_ks.VERSION.zip` をダウンロード，展開します．できた`wav_output_ks.auo2`を，AviUtl ExEdit2 のプレビュー画面にドラッグ&ドロップし，インストールを許可します．
 
+## アンインストール
+`%ProgramData%\Plugin\wav_output_ks.auo2` と `%ProgramData%\Plugin\wav_output_ks.config` を削除します．`data` フォルダを設定している場合は，それ以下の同等のファイルを削除します．
+
 ## 設定
 <dl>
  <dt>16bit short / 32bit float</dt>
-  <dd>出力フォーマットを `WAVE_FORMAT_PCM` か `WAVE_FORMAT_IEEE_FLOAT` から選択します．</dd>
+  <dd>出力フォーマットを <code>WAVE_FORMAT_PCM</code> か <code>WAVE_FORMAT_IEEE_FLOAT</code> から選択します．</dd>
  <dt>ステレオ</dt>
   <dd>ステレオ(2チャンネル)で出力します．プロジェクトがモノラルなら同じデータを複製し，3チャンネル以上なら先頭2チャンネルのみ出力します．</dd>
  <dt>モノラル</dt>

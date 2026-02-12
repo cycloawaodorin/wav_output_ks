@@ -1,8 +1,9 @@
-﻿#include "output2.hpp"
-#include "config2.hpp"
+﻿#include <Windows.h>
 #include <mmreg.h>
 #include <format>
 #include <fstream>
+#include "output2.hpp"
+#include "config2.hpp"
 #include "resource.hpp"
 #include "version.hpp"
 
@@ -53,6 +54,130 @@ round2(int sum, int n)
 }
 
 static bool
+write_asis(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
+{
+	int readed = 0;
+	for ( int i=0; i<oip->audio_n; i+=readed ) {
+		if ( oip->func_is_abort() ) { break; }
+		oip->func_rest_time_disp(i, oip->audio_n);
+		char *data = static_cast<char *>( oip->func_get_audio(i, len, &readed, config.format) );
+		if ( readed == 0 ) { break; }
+		ofs.write(data, readed*wf.nBlockAlign);
+	}
+	return true;
+}
+
+static bool
+write_merge_f(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
+{
+	float *calced = nullptr;
+	try {
+		calced = new float[len];
+	} catch ( std::bad_alloc &e ) {
+		return false;
+	}
+	int readed = 0;
+	for ( int i=0; i<oip->audio_n; i+=readed ) {
+		if ( oip->func_is_abort() ) { break; }
+		oip->func_rest_time_disp(i, oip->audio_n);
+		float *org = static_cast<float *>( oip->func_get_audio(i, len, &readed, config.format) );
+		if ( readed == 0 ) { break; }
+		for (auto j=0; j<readed; j++) {
+			float f = 0.0f;
+			for (auto k=0; k<(oip->audio_ch); k++) {
+				f += org[j*(oip->audio_ch)+k];
+			}
+			calced[j] = f/static_cast<float>(oip->audio_ch);
+		}
+		ofs.write(reinterpret_cast<const char*>(calced), readed*wf.nBlockAlign);
+	}
+	delete[] calced;
+	return true;
+}
+
+static bool
+write_merge_s(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
+{
+	std::int16_t *calced = nullptr;
+	try {
+		calced = new std::int16_t[len];
+	} catch ( std::bad_alloc &e ) {
+		return false;
+	}
+	int readed = 0;
+	for ( int i=0; i<oip->audio_n; i+=readed ) {
+		if ( oip->func_is_abort() ) { break; }
+		oip->func_rest_time_disp(i, oip->audio_n);
+		std::int16_t *org = static_cast<std::int16_t *>( oip->func_get_audio(i, len, &readed, config.format) );
+		if ( readed == 0 ) { break; }
+		for (auto j=0; j<readed; j++) {
+			int s = 0;
+			for (auto k=0; k<(oip->audio_ch); k++) {
+				s += org[j*(oip->audio_ch)+k];
+			}
+			calced[j] = round2(s, oip->audio_ch);
+		}
+		ofs.write(reinterpret_cast<const char*>(calced), readed*wf.nBlockAlign);
+	}
+	delete[] calced;
+	return true;
+}
+
+template <typename T>
+static bool
+write_dup(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
+{
+	T *calced = nullptr;
+	try {
+		calced = new T[len*2];
+	} catch ( std::bad_alloc &e ) {
+		return false;
+	}
+	int readed = 0;
+	for ( int i=0; i<oip->audio_n; i+=readed ) {
+		if ( oip->func_is_abort() ) { break; }
+		oip->func_rest_time_disp(i, oip->audio_n);
+		T *org = static_cast<T *>( oip->func_get_audio(i, len, &readed, config.format) );
+		if ( readed == 0 ) { break; }
+		for (auto j=0; j<readed; j++) {
+			for (auto k=0; k<wf.nChannels; k++) {
+				calced[j*wf.nChannels+k] = org[j*(oip->audio_ch)+k];
+			}
+		}
+		ofs.write(reinterpret_cast<const char*>(calced), readed*wf.nBlockAlign);
+	}
+	delete[] calced;
+	return true;
+}
+
+template <typename T>
+static bool
+write_top2(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
+{
+	T *calced = nullptr;
+	try {
+		calced = new T[len*2];
+	} catch ( std::bad_alloc &e ) {
+		return false;
+	}
+	int readed = 0;
+	for ( int i=0; i<oip->audio_n; i+=readed ) {
+		if ( oip->func_is_abort() ) { break; }
+		oip->func_rest_time_disp(i, oip->audio_n);
+		T *org = static_cast<T *>( oip->func_get_audio(i, len, &readed, config.format) );
+		if ( readed == 0 ) { break; }
+		for (auto j=0; j<readed; j++) {
+			for (auto k=0; k<wf.nChannels; k++) {
+				calced[j*wf.nChannels+k] = org[j];
+			}
+		}
+		ofs.write(reinterpret_cast<const char*>(calced), readed*wf.nBlockAlign);
+	}
+	delete[] calced;
+	return true;
+}
+
+static bool
 func_output(OUTPUT_INFO *oip)
 {
 	// ヘッダの構築
@@ -75,40 +200,6 @@ func_output(OUTPUT_INFO *oip)
 	wf.nAvgBytesPerSec = wf.nSamplesPerSec * wf.nBlockAlign;
 	DWORD datasize = wf.nBlockAlign * oip->audio_n + 36;
 	
-	// 変換用のメモリ領域確保
-	int readlength = oip->audio_rate;
-	float *calced_f=nullptr;
-	std::int16_t *calced_s=nullptr;
-	if ( wf.nChannels == 1 && 1 < oip->audio_ch ) {
-		if ( config.format == WAVE_FORMAT_IEEE_FLOAT ) {
-			try {
-				calced_f = new float[readlength];
-			} catch ( std::bad_alloc &e ) {
-				return false;
-			}
-		} else {
-			try {
-				calced_s = new std::int16_t[readlength];
-			} catch ( std::bad_alloc &e ) {
-				return false;
-			}
-		}
-	} else if ( wf.nChannels == 2 && wf.nChannels != oip->audio_ch ) {
-		if ( config.format == WAVE_FORMAT_IEEE_FLOAT ) {
-			try {
-				calced_f = new float[readlength*2];
-			} catch ( std::bad_alloc &e ) {
-				return false;
-			}
-		} else {
-			try {
-				calced_s = new std::int16_t[readlength*2];
-			} catch ( std::bad_alloc &e ) {
-				return false;
-			}
-		}
-	}
-	
 	std::ofstream ofs(oip->savefile, std::ios::binary);
 	if (!ofs.is_open()) { return false; }
 	
@@ -127,81 +218,31 @@ func_output(OUTPUT_INFO *oip)
 	ofs.write(reinterpret_cast<const char *>(&datasize), sizeof(DWORD));
 	
 	// データの書き込み
-	for ( int i=0; i<oip->audio_n; ) {
-		if ( oip->func_is_abort() ) { break; }
-		oip->func_rest_time_disp(i, oip->audio_n);
-		int readed = 0;
-		char *data = static_cast<char *>( oip->func_get_audio(i, readlength, &readed, config.format) );
-		if ( readed == 0 ) { break; }
-		if ( wf.nChannels == oip->audio_ch ) { // プロジェクトと出力のチャンネル数が同じならそのまま
-			ofs.write(data, readed*wf.nBlockAlign);
-		} else if ( wf.nChannels == 1 ) { // 複数チャンネル -> モノラル：すべてのチャンネルの平均にマージする
-			if ( config.format == WAVE_FORMAT_IEEE_FLOAT ) {
-				float *org = reinterpret_cast<float *>(data);
-				for (auto j=0; j<readed; j++) {
-					float f = 0.0f;
-					for (auto k=0; k<(oip->audio_ch); k++) {
-						f += org[j*(oip->audio_ch)+k];
-					}
-					calced_f[j] = f/static_cast<float>(oip->audio_ch);
-				}
-				ofs.write(reinterpret_cast<const char*>(calced_f), readed*wf.nBlockAlign);
-			} else {
-				std::int16_t *org = reinterpret_cast<std::int16_t *>(data);
-				for (auto j=0; j<readed; j++) {
-					int s = 0;
-					for (auto k=0; k<(oip->audio_ch); k++) {
-						s += org[j*(oip->audio_ch)+k];
-					}
-					calced_s[j] = round2(s, oip->audio_ch);
-				}
-				ofs.write(reinterpret_cast<const char*>(calced_s), readed*wf.nBlockAlign);
-			}
-		} else if ( oip->audio_ch == 1 ) { // モノラル -> ステレオ：左右に同じ値を入れる
-			if ( config.format == WAVE_FORMAT_IEEE_FLOAT ) {
-				float *org = reinterpret_cast<float *>(data);
-				for (auto j=0; j<readed; j++) {
-					for (auto k=0; k<wf.nChannels; k++) {
-						calced_f[j*wf.nChannels+k] = org[j];
-					}
-				}
-				ofs.write(reinterpret_cast<const char*>(calced_f), readed*wf.nBlockAlign);
-			} else {
-				std::int16_t *org = reinterpret_cast<std::int16_t *>(data);
-				for (auto j=0; j<readed; j++) {
-					for (auto k=0; k<wf.nChannels; k++) {
-						calced_s[j*wf.nChannels+k] = org[j];
-					}
-				}
-				ofs.write(reinterpret_cast<const char*>(calced_s), readed*wf.nBlockAlign);
-			}
-		} else { // 3チャンネル以上 -> ステレオ：先頭2チャンネルだけを出力する
-			if ( config.format == WAVE_FORMAT_IEEE_FLOAT ) {
-				float *org = reinterpret_cast<float *>(data);
-				for (auto j=0; j<readed; j++) {
-					for (auto k=0; k<wf.nChannels; k++) {
-						calced_f[j*wf.nChannels+k] = org[j*(oip->audio_ch)+k];
-					}
-				}
-				ofs.write(reinterpret_cast<const char*>(calced_f), readed*wf.nBlockAlign);
-			} else {
-				std::int16_t *org = reinterpret_cast<std::int16_t *>(data);
-				for (auto j=0; j<readed; j++) {
-					for (auto k=0; k<wf.nChannels; k++) {
-						calced_s[j*wf.nChannels+k] = org[j*(oip->audio_ch)+k];
-					}
-				}
-				ofs.write(reinterpret_cast<const char*>(calced_s), readed*wf.nBlockAlign);
-			}
+	bool ret;
+	if ( wf.nChannels == oip->audio_ch ) { // プロジェクトと出力のチャンネル数が同じならそのまま
+		ret = write_asis(oip, wf, ofs, oip->audio_rate);
+	} else if ( wf.nChannels == 1 ) { // 複数チャンネル -> モノラル：すべてのチャンネルの平均にマージする
+		if ( config.format == WAVE_FORMAT_IEEE_FLOAT ) {
+			ret = write_merge_f(oip, wf, ofs, oip->audio_rate);
+		} else {
+			ret = write_merge_s(oip, wf, ofs, oip->audio_rate);
 		}
-		i += readed;
+	} else if ( oip->audio_ch == 1 ) { // モノラル -> ステレオ：左右に同じ値を入れる
+		if ( config.format == WAVE_FORMAT_IEEE_FLOAT ) {
+			ret = write_dup<float>(oip, wf, ofs, oip->audio_rate);
+		} else {
+			ret = write_dup<std::int16_t>(oip, wf, ofs, oip->audio_rate);
+		}
+	} else { // 3チャンネル以上 -> ステレオ：先頭2チャンネルだけを出力する
+		if ( config.format == WAVE_FORMAT_IEEE_FLOAT ) {
+			ret = write_top2<float>(oip, wf, ofs, oip->audio_rate);
+		} else {
+			ret = write_top2<std::int16_t>(oip, wf, ofs, oip->audio_rate);
+		}
 	}
 	
-	delete[] calced_f;
-	delete[] calced_s;
-	
 	ofs.close();
-	return true;
+	return ret;
 }
 
 static WORD fmt_now=0, nch_now=-1;
@@ -261,7 +302,7 @@ func_config_proc(HWND hdlg, UINT umsg, WPARAM wparam, LPARAM lparam)
 static bool
 func_config(HWND hwnd, HINSTANCE dll_hinst)
 {
-	DialogBoxW(dll_hinst, L"CONFIG", hwnd, reinterpret_cast<DLGPROC>(func_config_proc));
+	DialogBoxW(dll_hinst, L"CONFIG", hwnd, func_config_proc);
 	save_config();
 	return true;
 }
