@@ -1,0 +1,5 @@
+LIBRARY wav_output_ks
+
+EXPORTS
+	GetOutputPluginTable @1
+	InitializeConfig @2

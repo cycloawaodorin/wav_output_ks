@@ -1,0 +1,4 @@
+/src/output2.hpp linguist-vendored
+/src/config2.hpp linguist-vendored
+*.md linguist-documentation
+/LICENSE linguist-documentation
