@@ -42,17 +42,6 @@ GetOutputPluginTable()
 	return &opt;
 }
 
-static std::int16_t
-round2(int sum, int n)
-{
-	int r = sum % n;
-	if ( r*2 < n ) {
-		return static_cast<std::int16_t>((sum-r)/n);
-	} else {
-		return static_cast<std::int16_t>((sum-r)/n+1);
-	}
-}
-
 static bool
 write_asis(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 {
@@ -60,7 +49,7 @@ write_asis(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 	for ( int i=0; i<oip->audio_n; i+=readed ) {
 		if ( oip->func_is_abort() ) { break; }
 		oip->func_rest_time_disp(i, oip->audio_n);
-		char *data = static_cast<char *>( oip->func_get_audio(i, len, &readed, config.format) );
+		const char *data = static_cast<const char *>( oip->func_get_audio(i, len, &readed, config.format) );
 		if ( readed == 0 ) { break; }
 		ofs.write(data, readed*wf.nBlockAlign);
 	}
@@ -80,7 +69,7 @@ write_merge_f(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 	for ( int i=0; i<oip->audio_n; i+=readed ) {
 		if ( oip->func_is_abort() ) { break; }
 		oip->func_rest_time_disp(i, oip->audio_n);
-		float *org = static_cast<float *>( oip->func_get_audio(i, len, &readed, config.format) );
+		const float *org = static_cast<const float *>( oip->func_get_audio(i, len, &readed, config.format) );
 		if ( readed == 0 ) { break; }
 		for (auto j=0; j<readed; j++) {
 			float f = 0.0f;
@@ -89,10 +78,21 @@ write_merge_f(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 			}
 			calced[j] = f/static_cast<float>(oip->audio_ch);
 		}
-		ofs.write(reinterpret_cast<const char*>(calced), readed*wf.nBlockAlign);
+		ofs.write(reinterpret_cast<const char *>(calced), readed*wf.nBlockAlign);
 	}
 	delete[] calced;
 	return true;
+}
+
+static std::int16_t
+round2(int sum, int n)
+{
+	int r = sum % n;
+	if ( r*2 < n ) {
+		return static_cast<std::int16_t>((sum-r)/n);
+	} else {
+		return static_cast<std::int16_t>((sum-r)/n+1);
+	}
 }
 
 static bool
@@ -108,7 +108,7 @@ write_merge_s(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 	for ( int i=0; i<oip->audio_n; i+=readed ) {
 		if ( oip->func_is_abort() ) { break; }
 		oip->func_rest_time_disp(i, oip->audio_n);
-		std::int16_t *org = static_cast<std::int16_t *>( oip->func_get_audio(i, len, &readed, config.format) );
+		const std::int16_t *org = static_cast<const std::int16_t *>( oip->func_get_audio(i, len, &readed, config.format) );
 		if ( readed == 0 ) { break; }
 		for (auto j=0; j<readed; j++) {
 			int s = 0;
@@ -117,7 +117,7 @@ write_merge_s(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 			}
 			calced[j] = round2(s, oip->audio_ch);
 		}
-		ofs.write(reinterpret_cast<const char*>(calced), readed*wf.nBlockAlign);
+		ofs.write(reinterpret_cast<const char *>(calced), readed*wf.nBlockAlign);
 	}
 	delete[] calced;
 	return true;
@@ -127,26 +127,18 @@ template <typename T>
 static bool
 write_dup(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 {
-	T *calced = nullptr;
-	try {
-		calced = new T[len*2];
-	} catch ( std::bad_alloc &e ) {
-		return false;
-	}
 	int readed = 0;
 	for ( int i=0; i<oip->audio_n; i+=readed ) {
 		if ( oip->func_is_abort() ) { break; }
 		oip->func_rest_time_disp(i, oip->audio_n);
-		T *org = static_cast<T *>( oip->func_get_audio(i, len, &readed, config.format) );
+		const T *org = static_cast<const T *>( oip->func_get_audio(i, len, &readed, config.format) );
 		if ( readed == 0 ) { break; }
 		for (auto j=0; j<readed; j++) {
 			for (auto k=0; k<wf.nChannels; k++) {
-				calced[j*wf.nChannels+k] = org[j*(oip->audio_ch)+k];
+				ofs.write(reinterpret_cast<const char *>(&org[j]), wf.nBlockAlign);
 			}
 		}
-		ofs.write(reinterpret_cast<const char*>(calced), readed*wf.nBlockAlign);
 	}
-	delete[] calced;
 	return true;
 }
 
@@ -154,26 +146,18 @@ template <typename T>
 static bool
 write_top2(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 {
-	T *calced = nullptr;
-	try {
-		calced = new T[len*2];
-	} catch ( std::bad_alloc &e ) {
-		return false;
-	}
 	int readed = 0;
 	for ( int i=0; i<oip->audio_n; i+=readed ) {
 		if ( oip->func_is_abort() ) { break; }
 		oip->func_rest_time_disp(i, oip->audio_n);
-		T *org = static_cast<T *>( oip->func_get_audio(i, len, &readed, config.format) );
+		const T *org = static_cast<const T *>( oip->func_get_audio(i, len, &readed, config.format) );
 		if ( readed == 0 ) { break; }
 		for (auto j=0; j<readed; j++) {
 			for (auto k=0; k<wf.nChannels; k++) {
-				calced[j*wf.nChannels+k] = org[j];
+				ofs.write(reinterpret_cast<const char *>(&org[j*(oip->audio_ch)+k]), wf.nBlockAlign);
 			}
 		}
-		ofs.write(reinterpret_cast<const char*>(calced), readed*wf.nBlockAlign);
 	}
-	delete[] calced;
 	return true;
 }
 
@@ -254,7 +238,7 @@ InitializeConfig(CONFIG_HANDLE *ch)
 	load_config();
 }
 
-static LRESULT CALLBACK
+static INT_PTR CALLBACK
 func_config_proc(HWND hdlg, UINT umsg, WPARAM wparam, LPARAM lparam)
 {
 	if ( umsg == WM_INITDIALOG ) {
