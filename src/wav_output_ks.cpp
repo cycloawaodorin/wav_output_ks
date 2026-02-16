@@ -59,12 +59,6 @@ write_asis(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 static bool
 write_merge_f(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 {
-	float *calced = nullptr;
-	try {
-		calced = new float[len];
-	} catch ( std::bad_alloc &e ) {
-		return false;
-	}
 	int readed = 0;
 	for ( int i=0; i<oip->audio_n; i+=readed ) {
 		if ( oip->func_is_abort() ) { break; }
@@ -76,11 +70,10 @@ write_merge_f(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 			for (auto k=0; k<(oip->audio_ch); k++) {
 				f += org[j*(oip->audio_ch)+k];
 			}
-			calced[j] = f/static_cast<float>(oip->audio_ch);
+			f /= static_cast<float>(oip->audio_ch);
+			ofs.write(reinterpret_cast<const char *>(&f), wf.nBlockAlign);
 		}
-		ofs.write(reinterpret_cast<const char *>(calced), readed*wf.nBlockAlign);
 	}
-	delete[] calced;
 	return true;
 }
 
@@ -98,12 +91,6 @@ round2(int sum, int n)
 static bool
 write_merge_s(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 {
-	std::int16_t *calced = nullptr;
-	try {
-		calced = new std::int16_t[len];
-	} catch ( std::bad_alloc &e ) {
-		return false;
-	}
 	int readed = 0;
 	for ( int i=0; i<oip->audio_n; i+=readed ) {
 		if ( oip->func_is_abort() ) { break; }
@@ -115,11 +102,10 @@ write_merge_s(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 			for (auto k=0; k<(oip->audio_ch); k++) {
 				s += org[j*(oip->audio_ch)+k];
 			}
-			calced[j] = round2(s, oip->audio_ch);
+			std::int16_t calced = round2(s, oip->audio_ch);
+			ofs.write(reinterpret_cast<const char *>(&calced), wf.nBlockAlign);
 		}
-		ofs.write(reinterpret_cast<const char *>(calced), readed*wf.nBlockAlign);
 	}
-	delete[] calced;
 	return true;
 }
 
