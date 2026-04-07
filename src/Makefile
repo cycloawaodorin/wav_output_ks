@@ -29,7 +29,7 @@ $(OBJ): $(SRCS) $(HDRS)
 	$(CXX) $(CXXWFLAGS) $(CXXFLAGS) $(INCLUDES) -o $(OBJ) $(SRC)
 
 .rc.res:
-	windres --input-format=rc --output-format=coff -o $@ $<
+	windres -c 65001 --input-format=rc --output-format=coff -o $@ $<
 
 clean:
 	$(RM) $(TARGET) $(OBJ) $(RES)
