@@ -16,7 +16,7 @@ static LPCWSTR func_get_config_text();
 static struct {
 	WORD format;
 	WORD n_ch;
-} config = {WAVE_FORMAT_PCM, 0};
+} config = {WAVE_FORMAT_PCM, 0u};
 static const std::wstring auo_filename = L"wav_output_ks.auo2";
 static const std::wstring config_filename = L"wav_output_ks.config";
 static std::wstring config_path;
@@ -43,10 +43,10 @@ GetOutputPluginTable()
 }
 
 static bool
-write_asis(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
+write_asis(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int len)
 {
 	int readed = 0;
-	for ( int i=0; i<oip->audio_n; i+=readed ) {
+	for (auto i=0; i<oip->audio_n; i+=readed) {
 		if ( oip->func_is_abort() ) { break; }
 		oip->func_rest_time_disp(i, oip->audio_n);
 		const char *data = static_cast<const char *>( oip->func_get_audio(i, len, &readed, config.format) );
@@ -57,10 +57,10 @@ write_asis(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 }
 
 static bool
-write_merge_f(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
+write_merge_f(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int len)
 {
 	int readed = 0;
-	for ( int i=0; i<oip->audio_n; i+=readed ) {
+	for (auto i=0; i<oip->audio_n; i+=readed) {
 		if ( oip->func_is_abort() ) { break; }
 		oip->func_rest_time_disp(i, oip->audio_n);
 		const float *org = static_cast<const float *>( oip->func_get_audio(i, len, &readed, config.format) );
@@ -80,29 +80,36 @@ write_merge_f(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 static std::int16_t
 round2(int sum, int n)
 {
-	int r = sum % n;
+	auto r = sum % n;
 	if ( r*2 < n ) {
 		return static_cast<std::int16_t>((sum-r)/n);
+	} else if ( r*2 == n ) {
+		r = (sum-r)/n;
+		if ( (r&1) == 0 ) {
+			return static_cast<std::int16_t>(r);
+		} else {
+			return static_cast<std::int16_t>(r+1);
+		}
 	} else {
 		return static_cast<std::int16_t>((sum-r)/n+1);
 	}
 }
 
 static bool
-write_merge_s(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
+write_merge_s(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int len)
 {
 	int readed = 0;
-	for ( int i=0; i<oip->audio_n; i+=readed ) {
+	for (auto i=0; i<oip->audio_n; i+=readed) {
 		if ( oip->func_is_abort() ) { break; }
 		oip->func_rest_time_disp(i, oip->audio_n);
-		const std::int16_t *org = static_cast<const std::int16_t *>( oip->func_get_audio(i, len, &readed, config.format) );
+		const auto org = static_cast<const std::int16_t *>( oip->func_get_audio(i, len, &readed, config.format) );
 		if ( readed == 0 ) { break; }
 		for (auto j=0; j<readed; j++) {
 			int s = 0;
 			for (auto k=0; k<(oip->audio_ch); k++) {
 				s += org[j*(oip->audio_ch)+k];
 			}
-			std::int16_t calced = round2(s, oip->audio_ch);
+			auto calced = round2(s, oip->audio_ch);
 			ofs.write(reinterpret_cast<const char *>(&calced), wf.nBlockAlign);
 		}
 	}
@@ -111,13 +118,13 @@ write_merge_s(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 
 template <typename T>
 static bool
-write_dup(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
+write_dup(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int len)
 {
 	int readed = 0;
-	for ( int i=0; i<oip->audio_n; i+=readed ) {
+	for (auto i=0; i<oip->audio_n; i+=readed) {
 		if ( oip->func_is_abort() ) { break; }
 		oip->func_rest_time_disp(i, oip->audio_n);
-		const T *org = static_cast<const T *>( oip->func_get_audio(i, len, &readed, config.format) );
+		const auto org = static_cast<const T *>( oip->func_get_audio(i, len, &readed, config.format) );
 		if ( readed == 0 ) { break; }
 		for (auto j=0; j<readed; j++) {
 			for (auto k=0; k<wf.nChannels; k++) {
@@ -130,13 +137,13 @@ write_dup(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
 
 template <typename T>
 static bool
-write_top2(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int &len)
+write_top2(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int len)
 {
 	int readed = 0;
-	for ( int i=0; i<oip->audio_n; i+=readed ) {
+	for (auto i=0; i<oip->audio_n; i+=readed) {
 		if ( oip->func_is_abort() ) { break; }
 		oip->func_rest_time_disp(i, oip->audio_n);
-		const T *org = static_cast<const T *>( oip->func_get_audio(i, len, &readed, config.format) );
+		const auto org = static_cast<const T *>( oip->func_get_audio(i, len, &readed, config.format) );
 		if ( readed == 0 ) { break; }
 		for (auto j=0; j<readed; j++) {
 			for (auto k=0; k<wf.nChannels; k++) {
@@ -158,17 +165,17 @@ func_output(OUTPUT_INFO *oip)
 	} else {
 		wf.nChannels = config.n_ch;
 	}
-	wf.nSamplesPerSec = oip->audio_rate;
+	wf.nSamplesPerSec = static_cast<DWORD>(oip->audio_rate);
 	if ( config.format == WAVE_FORMAT_IEEE_FLOAT ) {
-		wf.wBitsPerSample = 32;
+		wf.wBitsPerSample = 32u;
 	} else if ( config.format == WAVE_FORMAT_PCM ) {
-		wf.wBitsPerSample = 16;
+		wf.wBitsPerSample = 16u;
 	} else {
 		return false;
 	}
-	wf.nBlockAlign = wf.nChannels * ( wf.wBitsPerSample / 8 );
+	wf.nBlockAlign = wf.nChannels * ( wf.wBitsPerSample / 8u );
 	wf.nAvgBytesPerSec = wf.nSamplesPerSec * wf.nBlockAlign;
-	DWORD datasize = wf.nBlockAlign * oip->audio_n + 36;
+	DWORD datasize = wf.nBlockAlign * static_cast<DWORD>(oip->audio_n) + 36u;
 	
 	std::ofstream ofs(oip->savefile, std::ios::binary);
 	if (!ofs.is_open()) { return false; }
@@ -179,7 +186,7 @@ func_output(OUTPUT_INFO *oip)
 	ofs.write(reinterpret_cast<const char *>(&fccWAVE), sizeof(DWORD));
 	
 	ofs.write(reinterpret_cast<const char *>(&fccfmt), sizeof(DWORD));
-	constexpr static const DWORD wfsize = 16;
+	constexpr static const DWORD wfsize = 16u;
 	ofs.write(reinterpret_cast<const char *>(&wfsize), sizeof(DWORD));
 	ofs.write(reinterpret_cast<const char *>(&wf), wfsize);
 	
@@ -215,7 +222,7 @@ func_output(OUTPUT_INFO *oip)
 	return ret;
 }
 
-static WORD fmt_now=0, nch_now=-1;
+static WORD fmt_now=0u, nch_now=0u;
 
 EXTERN_C void
 InitializeConfig(CONFIG_HANDLE *ch)
@@ -235,11 +242,11 @@ func_config_proc(HWND hdlg, UINT umsg, WPARAM wparam, LPARAM lparam)
 		} else if ( fmt_now == WAVE_FORMAT_PCM ) {
 			SendMessage(GetDlgItem(hdlg, IDC_16S), BM_SETCHECK, TRUE, 0);
 		}
-		if ( nch_now == 2 ) {
+		if ( nch_now == 2u ) {
 			SendMessage(GetDlgItem(hdlg, IDC_STEREO), BM_SETCHECK, TRUE, 0);
-		} else if ( nch_now == 1 ) {
+		} else if ( nch_now == 1u ) {
 			SendMessage(GetDlgItem(hdlg, IDC_MONAURAL), BM_SETCHECK, TRUE, 0);
-		} else if ( nch_now == 0 ) {
+		} else if ( nch_now == 0u ) {
 			SendMessage(GetDlgItem(hdlg, IDC_AUTO), BM_SETCHECK, TRUE, 0);
 		}
 		return TRUE;
@@ -258,11 +265,11 @@ func_config_proc(HWND hdlg, UINT umsg, WPARAM wparam, LPARAM lparam)
 		} else if ( lwparam == IDC_16S ) {
 			fmt_now = WAVE_FORMAT_PCM;
 		} else if ( lwparam == IDC_STEREO ) {
-			nch_now = 2;
+			nch_now = 2u;
 		} else if ( lwparam == IDC_MONAURAL ) {
-			nch_now = 1;
+			nch_now = 1u;
 		} else if ( lwparam == IDC_AUTO ) {
-			nch_now = 0;
+			nch_now = 0u;
 		}
 		return TRUE;
 	}
