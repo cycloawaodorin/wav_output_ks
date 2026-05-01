@@ -1,6 +1,5 @@
 ﻿#include <Windows.h>
 #include <mmreg.h>
-#include <format>
 #include <fstream>
 #include "output2.hpp"
 #include "config2.hpp"
@@ -20,10 +19,6 @@ static struct {
 static const std::wstring auo_filename = L"wav_output_ks.auo2";
 static const std::wstring config_filename = L"wav_output_ks.config";
 static std::wstring config_path;
-constexpr static const DWORD fccRIFF = mmioFOURCC('R', 'I', 'F', 'F');
-constexpr static const DWORD fccWAVE = mmioFOURCC('W', 'A', 'V', 'E');
-constexpr static const DWORD fccfmt = mmioFOURCC('f', 'm', 't', ' ');
-constexpr static const DWORD fccdata = mmioFOURCC('d', 'a', 't', 'a');
 
 #define PLUGIN_NAME L"WAVファイル出力"
 
@@ -40,6 +35,50 @@ GetOutputPluginTable()
 		func_get_config_text,
 	};
 	return &opt;
+}
+
+static DWORD
+build_header(OUTPUT_INFO *oip, WAVEFORMATEX &wf)
+{
+	wf.wFormatTag = config.format;
+	if ( config.n_ch == 0 ) {
+		wf.nChannels = static_cast<WORD>(oip->audio_ch);
+	} else {
+		wf.nChannels = config.n_ch;
+	}
+	wf.nSamplesPerSec = static_cast<DWORD>(oip->audio_rate);
+	if ( config.format == WAVE_FORMAT_IEEE_FLOAT ) {
+		wf.wBitsPerSample = 32u;
+	} else if ( config.format == WAVE_FORMAT_PCM ) {
+		wf.wBitsPerSample = 16u;
+	} else {
+		return false;
+	}
+	wf.nBlockAlign = wf.nChannels * ( wf.wBitsPerSample / 8u );
+	wf.nAvgBytesPerSec = wf.nSamplesPerSec * wf.nBlockAlign;
+	return wf.nBlockAlign * static_cast<DWORD>(oip->audio_n) + 36u;
+}
+
+static void
+write_header(WAVEFORMATEX &wf, std::ofstream &ofs, DWORD &datasize)
+{
+	constexpr static const DWORD fccRIFF = mmioFOURCC('R', 'I', 'F', 'F');
+	constexpr static const DWORD fccWAVE = mmioFOURCC('W', 'A', 'V', 'E');
+	constexpr static const DWORD fccfmt = mmioFOURCC('f', 'm', 't', ' ');
+	constexpr static const DWORD fccdata = mmioFOURCC('d', 'a', 't', 'a');
+	
+	ofs.write(reinterpret_cast<const char *>(&fccRIFF), sizeof(DWORD));
+	ofs.write(reinterpret_cast<const char *>(&datasize), sizeof(DWORD));
+	ofs.write(reinterpret_cast<const char *>(&fccWAVE), sizeof(DWORD));
+	
+	ofs.write(reinterpret_cast<const char *>(&fccfmt), sizeof(DWORD));
+	constexpr static const DWORD wfsize = 16u;
+	ofs.write(reinterpret_cast<const char *>(&wfsize), sizeof(DWORD));
+	ofs.write(reinterpret_cast<const char *>(&wf), wfsize);
+	
+	datasize -= 36;
+	ofs.write(reinterpret_cast<const char *>(&fccdata), sizeof(DWORD));
+	ofs.write(reinterpret_cast<const char *>(&datasize), sizeof(DWORD));
 }
 
 static bool
@@ -157,42 +196,14 @@ write_top2(OUTPUT_INFO *oip, WAVEFORMATEX &wf, std::ofstream &ofs, int len)
 static bool
 func_output(OUTPUT_INFO *oip)
 {
-	// ヘッダの構築
+	// ヘッダの構築と書き込み
 	WAVEFORMATEX wf;
-	wf.wFormatTag = config.format;
-	if ( config.n_ch == 0 ) {
-		wf.nChannels = static_cast<WORD>(oip->audio_ch);
-	} else {
-		wf.nChannels = config.n_ch;
-	}
-	wf.nSamplesPerSec = static_cast<DWORD>(oip->audio_rate);
-	if ( config.format == WAVE_FORMAT_IEEE_FLOAT ) {
-		wf.wBitsPerSample = 32u;
-	} else if ( config.format == WAVE_FORMAT_PCM ) {
-		wf.wBitsPerSample = 16u;
-	} else {
-		return false;
-	}
-	wf.nBlockAlign = wf.nChannels * ( wf.wBitsPerSample / 8u );
-	wf.nAvgBytesPerSec = wf.nSamplesPerSec * wf.nBlockAlign;
-	DWORD datasize = wf.nBlockAlign * static_cast<DWORD>(oip->audio_n) + 36u;
+	DWORD datasize = build_header(oip, wf);
 	
 	std::ofstream ofs(oip->savefile, std::ios::binary);
 	if (!ofs.is_open()) { return false; }
 	
-	// ヘッダの書き込み
-	ofs.write(reinterpret_cast<const char *>(&fccRIFF), sizeof(DWORD));
-	ofs.write(reinterpret_cast<const char *>(&datasize), sizeof(DWORD));
-	ofs.write(reinterpret_cast<const char *>(&fccWAVE), sizeof(DWORD));
-	
-	ofs.write(reinterpret_cast<const char *>(&fccfmt), sizeof(DWORD));
-	constexpr static const DWORD wfsize = 16u;
-	ofs.write(reinterpret_cast<const char *>(&wfsize), sizeof(DWORD));
-	ofs.write(reinterpret_cast<const char *>(&wf), wfsize);
-	
-	datasize -= 36;
-	ofs.write(reinterpret_cast<const char *>(&fccdata), sizeof(DWORD));
-	ofs.write(reinterpret_cast<const char *>(&datasize), sizeof(DWORD));
+	write_header(wf, ofs, datasize);
 	
 	// データの書き込み
 	bool ret;
@@ -227,7 +238,9 @@ static WORD fmt_now=0u, nch_now=0u;
 EXTERN_C void
 InitializeConfig(CONFIG_HANDLE *ch)
 {
-	config_path = std::format(L"{}Plugin\\{}", ch->app_data_path, config_filename);
+	config_path = std::wstring(ch->app_data_path);
+	config_path += L"Plugin\\";
+	config_path += config_filename;
 	load_config();
 }
 
@@ -311,12 +324,10 @@ static LPCWSTR
 func_get_config_text()
 {
 	static std::wstring config_text;
-	config_text = std::format(
-		L"{} / {}",
-		( config.format == WAVE_FORMAT_IEEE_FLOAT ? L"32bit float" :
-			( config.format == WAVE_FORMAT_PCM ? L"16bit short" : L"error" ) ),
-		( config.n_ch == 0 ? L"オート" : ( config.n_ch == 1 ? L"モノラル" :
-			( config.n_ch == 2 ? L"ステレオ" : L"error" ) ) )
-	);
+	config_text = std::wstring(
+		config.format == WAVE_FORMAT_IEEE_FLOAT ? L"32bit float / " :
+			( config.format == WAVE_FORMAT_PCM ? L"16bit short / " : L"error / " ) );
+	config_text += ( config.n_ch == 0 ? L"オート" : ( config.n_ch == 1 ? L"モノラル" :
+			( config.n_ch == 2 ? L"ステレオ" : L"error" ) ) );
 	return config_text.c_str();
 }
