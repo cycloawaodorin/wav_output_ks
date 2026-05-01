@@ -1,6 +1,5 @@
 ﻿#include <Windows.h>
 #include <mmreg.h>
-#include <format>
 #include <fstream>
 #include "output2.hpp"
 #include "config2.hpp"
@@ -239,7 +238,9 @@ static WORD fmt_now=0u, nch_now=0u;
 EXTERN_C void
 InitializeConfig(CONFIG_HANDLE *ch)
 {
-	config_path = std::format(L"{}Plugin\\{}", ch->app_data_path, config_filename);
+	config_path = std::wstring(ch->app_data_path);
+	config_path += L"Plugin\\";
+	config_path += config_filename;
 	load_config();
 }
 
@@ -323,12 +324,10 @@ static LPCWSTR
 func_get_config_text()
 {
 	static std::wstring config_text;
-	config_text = std::format(
-		L"{} / {}",
-		( config.format == WAVE_FORMAT_IEEE_FLOAT ? L"32bit float" :
-			( config.format == WAVE_FORMAT_PCM ? L"16bit short" : L"error" ) ),
-		( config.n_ch == 0 ? L"オート" : ( config.n_ch == 1 ? L"モノラル" :
-			( config.n_ch == 2 ? L"ステレオ" : L"error" ) ) )
-	);
+	config_text = std::wstring(
+		config.format == WAVE_FORMAT_IEEE_FLOAT ? L"32bit float / " :
+			( config.format == WAVE_FORMAT_PCM ? L"16bit short / " : L"error / " ) );
+	config_text += ( config.n_ch == 0 ? L"オート" : ( config.n_ch == 1 ? L"モノラル" :
+			( config.n_ch == 2 ? L"ステレオ" : L"error" ) ) );
 	return config_text.c_str();
 }
