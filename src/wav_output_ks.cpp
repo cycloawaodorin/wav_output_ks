@@ -8,6 +8,8 @@
 
 static bool func_output(OUTPUT_INFO *oip);
 static bool func_config(HWND hwnd, HINSTANCE hinst);
+static bool func_load_project_config(PROJECT_FILE* project);
+static bool func_save_project_config(PROJECT_FILE* project);
 static void load_config();
 static void save_config();
 static LPCWSTR func_get_config_text();
@@ -33,6 +35,8 @@ GetOutputPluginTable()
 		func_output,
 		func_config,
 		func_get_config_text,
+		func_load_project_config,
+		func_save_project_config,
 	};
 	return &opt;
 }
@@ -294,6 +298,20 @@ func_config(HWND hwnd, HINSTANCE dll_hinst)
 {
 	DialogBoxW(dll_hinst, L"CONFIG", hwnd, func_config_proc);
 	save_config();
+	return true;
+}
+
+static bool
+func_load_project_config(PROJECT_FILE* project)
+{
+	project->get_param_binary("CONFIG", reinterpret_cast<void *>(&config), static_cast<int>(sizeof(config)));
+	return true;
+}
+
+static bool
+func_save_project_config(PROJECT_FILE* project)
+{
+	project->set_param_binary("CONFIG", reinterpret_cast<void *>(&config), static_cast<int>(sizeof(config)));
 	return true;
 }
 
