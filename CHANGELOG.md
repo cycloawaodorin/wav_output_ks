@@ -1,5 +1,8 @@
 # Change Log
 
+## 0.0.4 2026/05/13
+- Supported project-specific config saves, introduced in beta45.
+
 ## 0.0.3 2026/05/01
 - Cumulative coding amendment.
 
