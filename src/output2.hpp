@@ -140,10 +140,12 @@ struct OUTPUT_PLUGIN_TABLE {
 
 	// プロジェクトファイル側から出力設定の読み込み要求時に呼ばれる関数へのポインタ (FLAG_PROJECT_CONFIGが有効の時のみ呼ばれます)
 	// project	: プロジェクトファイル構造体へのポインタ
+	// 戻り値	: 成功時はtrueを返却
 	bool (*func_load_project_config)(PROJECT_FILE* project);
 
 	// プロジェクトファイル側への出力設定の書き込み要求時に呼ばれる関数へのポインタ (FLAG_PROJECT_CONFIGが有効の時のみ呼ばれます)
 	// project	: プロジェクトファイル構造体へのポインタ
+	// 戻り値	: 成功時はtrueを返却
 	bool (*func_save_project_config)(PROJECT_FILE* project);
 
 };
