@@ -1,5 +1,8 @@
 # Change Log
 
+## 0.0.5 2026/07/14
+- Fixed a minor bug.
+
 ## 0.0.4 2026/05/13
 - Supported project-specific config saves, introduced in beta45.
 
